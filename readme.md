@@ -11,7 +11,7 @@
 
 ## 👩‍🍳 How It Works ##
 
-RecipeBot listens for messages on your Discord server. To get recipe suggestions, mention the bot with a list of ingredients separated by commas.
+Foodie-Discord-Bot listens for messages on your Discord server. To get recipe suggestions, mention the bot with a list of ingredients separated by commas.
 
 Example: **@Foodie-Bot** tomatoes, chicken, rice
 
