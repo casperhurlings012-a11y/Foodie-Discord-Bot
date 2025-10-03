@@ -1,64 +1,109 @@
-import re
+import discord
+from discord.ext import commands, tasks
 import os
-import nextcord
-from nextcord import Interaction
-from nextcord.ext import commands
-from dotenv import load_dotenv
-import google.generativeai as genai
+import random
+from datetime import datetime
 
-# Load environment variables
-load_dotenv()
-dtoken = os.getenv("DKEY")
-api_key = os.getenv("GKEY")
+# ===== SETTINGS =====
+TOKEN = os.environ.get("DISCORD_TOKEN")
+PREFIX = "!"
+intents = discord.Intents.default()
+intents.message_content = True
+bot = commands.Bot(command_prefix=PREFIX, intents=intents)
 
-# Configure generative AI API
-genai.configure(api_key=api_key)
-
-# Set up the model
-generation_config = {
-    "temperature": 0.9,
-    "top_p": 1,
-    "top_k": 1,
-    "max_output_tokens": 1950,
-}
-
-safety_settings = [
-    {"category": "HARM_CATEGORY_HARASSMENT", "threshold": "BLOCK_MEDIUM_AND_ABOVE"},
-    {"category": "HARM_CATEGORY_HATE_SPEECH", "threshold": "BLOCK_MEDIUM_AND_ABOVE"},
-    {"category": "HARM_CATEGORY_SEXUALLY_EXPLICIT", "threshold": "BLOCK_MEDIUM_AND_ABOVE"},
-    {"category": "HARM_CATEGORY_DANGEROUS_CONTENT", "threshold": "BLOCK_MEDIUM_AND_ABOVE"},
+# ===== FOOD LIST =====
+food_list = [
+    "🍕 Pizza",
+    "🍔 Burger",
+    "🍟 Fries",
+    "🍩 Donut",
+    "🍣 Sushi",
+    "🥪 Sandwich",
+    "🌮 Taco",
+    "🍜 Ramen",
+    "🍦 Ice Cream"
 ]
 
-model = genai.GenerativeModel(
-    model_name="gemini-1.0-pro",
-    generation_config=generation_config,
-    safety_settings=safety_settings
-)
+# ===== MEMBER INVENTORY =====
+inventory = {}
 
-# Initialize bot
-intents = nextcord.Intents.default()
-intents.members = True
-client = commands.Bot(command_prefix="!", intents=intents)
+# ===== DAILY SPECIAL =====
+daily_special = random.choice(food_list)
+def update_daily_special():
+    global daily_special
+    daily_special = random.choice(food_list)
 
-@client.event
+# ===== EVENTS =====
+@bot.event
 async def on_ready():
-    print(f"Logged on as {client.user}!")
+    print(f"{bot.user} is online and ready to serve food!")
+    await bot.change_presence(activity=discord.Game("Serving tasty treats!"))
+    daily_special_task.start()
 
-@client.slash_command(name="test", description="Send your input to Generative AI")
-async def test(interaction: Interaction, question: str):
-    # Send initial response to acknowledge the command
-    await interaction.response.send_message("Generating response...", ephemeral=True)
+# ===== TASKS =====
+@tasks.loop(hours=24)
+async def daily_special_task():
+    update_daily_special()
 
-    # Send user input directly to the generative model
-    convo = model.start_chat(history=[])
-    convo.send_message(question)
-    response = convo.last.text
+# ===== COMMANDS =====
+@bot.command()
+async def eat(ctx):
+    """Get a random food item."""
+    food = random.choice(food_list)
+    user_id = str(ctx.author.id)
+    inventory.setdefault(user_id, []).append(food)
+    await ctx.send(f"{ctx.author.mention} ate {food}!")
+    if random.randint(1, 4) == 1:
+        await ctx.message.add_reaction("😋")
 
-    # Truncate the response if it exceeds the character limit
-    if len(response) > 2000:
-        response = response[:1997] + "..."
+@bot.command()
+async def menu(ctx):
+    """See the food menu."""
+    menu_text = "**Today's Menu:**\n" + "\n".join(food_list)
+    await ctx.send(menu_text)
 
-    # Send the generative AI response
-    await interaction.followup.send(f"Generative AI response:\n{response}")
+@bot.command()
+async def my_food(ctx):
+    """See what you've eaten."""
+    user_id = str(ctx.author.id)
+    foods = inventory.get(user_id, [])
+    if foods:
+        await ctx.send(f"{ctx.author.mention}, you've eaten: " + ", ".join(foods))
+    else:
+        await ctx.send(f"{ctx.author.mention}, you haven't eaten anything yet!")
 
-client.run(dtoken)
+@bot.command()
+async def special(ctx):
+    """See today's special food."""
+    await ctx.send(f"Today's special is: {daily_special}!")
+
+# ===== INTERACTIVE COMMANDS =====
+@bot.command()
+async def serve(ctx, member: discord.Member):
+    """Serve a random food item to another member."""
+    food = random.choice(food_list)
+    user_id = str(member.id)
+    inventory.setdefault(user_id, []).append(food)
+    await ctx.send(f"{ctx.author.mention} served {food} to {member.mention}! 🍽️")
+
+@bot.command()
+async def steal(ctx, member: discord.Member):
+    """Try to steal a random food item from another member."""
+    thief_id = str(ctx.author.id)
+    victim_id = str(member.id)
+    victim_food = inventory.get(victim_id, [])
+    if not victim_food:
+        await ctx.send(f"{ctx.author.mention}, {member.mention} has no food to steal!")
+        return
+
+    # 50% chance to succeed
+    if random.choice([True, False]):
+        stolen_food = random.choice(victim_food)
+        victim_food.remove(stolen_food)
+        inventory.setdefault(thief_id, []).append(stolen_food)
+        await ctx.send(f"{ctx.author.mention} successfully stole {stolen_food} from {member.mention}! 😏")
+    else:
+        await ctx.send(f"{ctx.author.mention} tried to steal from {member.mention} but failed! 😢")
+
+# ===== RUN BOT =====
+bot.run(TOKEN)
