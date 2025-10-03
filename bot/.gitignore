@@ -1,2 +1,15 @@
+# Environment variables
 .env
+
+# Python cache
+__pycache__/
+*.py[cod]
+
+# Virtual environments (if you ever create one)
+.venv/
+env/
+venv/
+
+# Logs
+*.log
 nohup.out
